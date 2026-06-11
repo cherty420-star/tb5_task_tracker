@@ -67,3 +67,13 @@ ReDoc: http://localhost:8000/api/schema/redoc/
 
 Админка: http://localhost:8000/admin/
 
+## Скриншоты
+
+### Swagger UI документация
+![Swagger UI](screenshots/swagger_screenshot.png)
+
+### Админка Django
+![Django Admin](screenshots/admin_screenshot.png)
+
+### Результаты тестирования
+![Tests](screenshots/tests_screenshot.png)
