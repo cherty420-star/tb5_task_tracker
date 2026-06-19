@@ -9,10 +9,12 @@ class User(AbstractUser):
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='employee')
 
-    # phone_number убрали, потому что он не нужен для базовой версии
+    # Новые поля
+    full_name = models.CharField(max_length=255, verbose_name='ФИО')
+    position = models.CharField(max_length=100, verbose_name='Должность')
 
     def __str__(self):
-        return f"{self.username} ({self.get_role_display()})"
+        return f"{self.full_name} ({self.get_role_display()})"
 
     @property
     def is_manager(self):

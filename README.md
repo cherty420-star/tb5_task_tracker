@@ -77,3 +77,6 @@ ReDoc: http://localhost:8000/api/schema/redoc/
 
 ### Результаты тестирования
 ![Tests](screenshots/tests_screenshot.png)
+
+## Покрытие тестами
+![Coverage](screenshots/tests_screenshot2.png)

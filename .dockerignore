@@ -1,0 +1,15 @@
+.venv
+venv
+env
+.git
+.gitignore
+__pycache__
+*.pyc
+db.sqlite3
+*.log
+.DS_Store
+.idea
+.vscode
+coverage.xml
+htmlcov
+.coverage

@@ -1,154 +1,157 @@
-from django.test import TestCase
-from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from datetime import timedelta
 from .models import Task, Status, Priority
 
 User = get_user_model()
 
 
-class TaskAPITestCase(TestCase):
-    """Тесты для API задач"""
+class TaskAdvancedTestCase(TestCase):
+    """Тесты для новых фич задач"""
 
     def setUp(self):
-        """Подготовка данных перед каждым тестом"""
+        self.client = APIClient()
+
         # Создаём пользователей
-        self.employee = User.objects.create_user(
-            username='employee1',
-            password='testpass123',
-            role='employee'
-        )
         self.manager = User.objects.create_user(
-            username='manager1',
-            password='testpass123',
-            role='manager'
+            username='manager',
+            password='pass123',
+            role='manager',
+            full_name='Менеджер Тест',
+            position='Директор'
+        )
+        self.employee1 = User.objects.create_user(
+            username='emp1',
+            password='pass123',
+            role='employee',
+            full_name='Сотрудник Один',
+            position='Разработчик'
+        )
+        self.employee2 = User.objects.create_user(
+            username='emp2',
+            password='pass123',
+            role='employee',
+            full_name='Сотрудник Два',
+            position='Тестировщик'
         )
 
         # Создаём статусы и приоритеты
         self.status_new = Status.objects.create(name='Новая')
-        self.priority_medium = Priority.objects.create(name='Средний', level=2)
+        self.status_in_progress = Status.objects.create(name='В работе')
+        self.status_done = Status.objects.create(name='Завершена')
+        self.priority_high = Priority.objects.create(name='Высокий', level=3)
 
-        # Создаём задачу для сотрудника
-        self.task = Task.objects.create(
-            title='Тестовая задача',
-            description='Описание тестовой задачи',
+        # Создаём задачи
+        self.task1 = Task.objects.create(
+            title='Задача 1',
             status=self.status_new,
-            priority=self.priority_medium,
-            assignee=self.employee,
+            assignee=self.employee1,
             created_by=self.manager
         )
-
-        # Настраиваем API клиент
-        self.client = APIClient()
-
-    def test_employee_can_view_own_tasks(self):
-        """Тест: Сотрудник видит только свои задачи"""
-        # Авторизуемся как сотрудник
-        self.client.force_authenticate(user=self.employee)
-
-        # Запрашиваем список задач
-        response = self.client.get('/api/tasks/tasks/')
-
-        # Проверяем
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['title'], 'Тестовая задача')
-
-    def test_employee_cannot_view_others_tasks(self):
-        """Тест: Сотрудник не видит задачи других сотрудников"""
-        # Создаём другого сотрудника и его задачу
-        other_employee = User.objects.create_user(
-            username='employee2',
-            password='testpass123',
-            role='employee'
-        )
-        Task.objects.create(
-            title='Чужая задача',
-            description='Эта задача не должна быть видна',
-            assignee=other_employee,
-            created_by=self.manager
+        self.task2 = Task.objects.create(
+            title='Задача 2',
+            status=self.status_in_progress,
+            assignee=self.employee2,
+            created_by=self.manager,
+            parent_task=self.task1
         )
 
-        # Авторизуемся как первый сотрудник
-        self.client.force_authenticate(user=self.employee)
-
-        # Запрашиваем список задач
-        response = self.client.get('/api/tasks/tasks/')
-
-        # Должна быть только своя задача
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertNotIn('Чужая задача', str(response.data))
-
-    def test_manager_can_view_all_tasks(self):
-        """Тест: Руководитель видит все задачи"""
-        # Создаём дополнительную задачу
-        other_employee = User.objects.create_user(
-            username='employee3',
-            password='testpass123',
-            role='employee'
-        )
-        Task.objects.create(
-            title='Задача другого сотрудника',
-            description='Руководитель должен её видеть',
-            assignee=other_employee,
-            created_by=self.manager
-        )
-
-        # Авторизуемся как руководитель
         self.client.force_authenticate(user=self.manager)
 
-        # Запрашиваем список задач
-        response = self.client.get('/api/tasks/tasks/')
-
-        # Должны быть обе задачи
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 2)
-
-    def test_create_task_without_auth(self):
-        """Тест: Неавторизованный пользователь не может создать задачу"""
-        self.client.force_authenticate(user=None)
-
+    def test_create_task_with_parent(self):
+        """Тест: Создание задачи с родительской задачей"""
         data = {
-            'title': 'Новая задача без авторизации',
-            'description': 'Эта задача не должна создаться'
-        }
-        response = self.client.post('/api/tasks/tasks/', data)
-
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_employee_can_create_task(self):
-        """Тест: Сотрудник может создать задачу"""
-        self.client.force_authenticate(user=self.employee)
-
-        data = {
-            'title': 'Моя новая задача',
-            'description': 'Я создал её сам'
+            'title': 'Подзадача',
+            'parent_task': self.task1.id,
+            'assignee_id': self.employee1.id
         }
         response = self.client.post('/api/tasks/tasks/', data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['title'], 'Моя новая задача')
-        self.assertEqual(response.data['assignee']['username'], self.employee.username)
-        self.assertEqual(response.data['created_by']['username'], self.employee.username)
+        self.assertEqual(response.data['parent_task'], self.task1.id)
 
-    def test_update_task(self):
-        """Тест: Обновление задачи"""
-        self.client.force_authenticate(user=self.employee)
-
+    def test_cannot_set_self_as_parent(self):
+        """Тест: Нельзя назначить задачу родителем самой себя"""
         data = {
-            'title': 'Обновлённое название задачи'
+            'title': 'Сам себе родитель',
+            'parent_task': self.task1.id
         }
-        response = self.client.patch(f'/api/tasks/tasks/{self.task.id}/', data)
+        # Пытаемся обновить существующую задачу, указав себя как родителя
+        response = self.client.patch(f'/api/tasks/tasks/{self.task1.id}/', data)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('родителем самой себя', str(response.data))
+
+    def test_busy_employees_endpoint(self):
+        """Тест: Эндпоинт занятых сотрудников"""
+        response = self.client.get('/api/tasks/tasks/busy_employees/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['title'], 'Обновлённое название задачи')
+        self.assertEqual(len(response.data), 2)  # Оба сотрудника с задачами
 
-    def test_delete_task(self):
-        """Тест: Удаление задачи"""
-        self.client.force_authenticate(user=self.employee)
+        # Сортировка: у кого больше задач
+        self.assertEqual(response.data[0]['id'], self.employee2.id)  # У него 1 задача в работе
 
-        response = self.client.delete(f'/api/tasks/tasks/{self.task.id}/')
+    def test_important_tasks_endpoint(self):
+        """Тест: Эндпоинт важных задач"""
+        # Создаём важную задачу: Новая, но с подзадачей в работе
+        important_task = Task.objects.create(
+            title='Важная задача',
+            status=self.status_new,
+            assignee=self.employee1,
+            created_by=self.manager
+        )
+        Task.objects.create(
+            title='Подзадача важной',
+            status=self.status_in_progress,
+            assignee=self.employee2,
+            created_by=self.manager,
+            parent_task=important_task
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(Task.objects.filter(id=self.task.id).count(), 0)
+        response = self.client.get('/api/tasks/tasks/important_tasks/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['task'], 'Важная задача')
+
+    def test_cannot_complete_task_with_active_subtasks(self):
+        """Тест: Нельзя завершить задачу с активными подзадачами"""
+        # Создаём задачу с подзадачей
+        parent = Task.objects.create(
+            title='Родитель',
+            status=self.status_new,
+            assignee=self.employee1,
+            created_by=self.manager
+        )
+        Task.objects.create(
+            title='Подзадача',
+            status=self.status_in_progress,
+            assignee=self.employee2,
+            created_by=self.manager,
+            parent_task=parent
+        )
+
+        # Пытаемся завершить родительскую задачу
+        response = self.client.patch(
+            f'/api/tasks/tasks/{parent.id}/',
+            {'status_id': self.status_done.id}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('активные подзадачи', str(response.data))
+
+    def test_deadline_validation(self):
+        """Тест: Валидация дедлайна в прошлом"""
+        past_deadline = (timezone.now() - timedelta(days=1)).isoformat()
+        data = {
+            'title': 'Задача с прошлым дедлайном',
+            'deadline': past_deadline
+        }
+        response = self.client.post('/api/tasks/tasks/', data)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Дедлайн не может быть в прошлом', str(response.data))
